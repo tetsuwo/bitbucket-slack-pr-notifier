@@ -35,30 +35,29 @@ for repo in BITBUCKET_REPOSITORIES.split(','):
         continue
     response = json.loads(req.text)
     for row in response['values']:
-        print '  Pull Request ID: ' + row['id']
-        print '  Pull Request Title: ' + row['title']
+        print row
+        print '  Pull Request ID: %d' % row['id']
+        print '  Pull Request Title: %s' % row['title']
         print '  ----'
-        text = 'Diff URL: ' + row['links']['diff']['href']
+        text = 'Diff URL: %s' % row['links']['diff']['href']
         payload = {
             'title': row['title'],
             'text': SLACK_TEXT,
             'channel': SLACK_CHANNEL,
             'username': SLACK_USERNAME,
             'icon_emoji': SLACK_ICON_EMOJI,
-            'attachments': [
-                {
-                    'title': row['title'],
-                    'text': text,
-                    'color': '#1e90ff'
-                }
-            ]
+            'attachments': [{
+                'title': row['title'],
+                'text': text,
+                'color': '#1e90ff'
+            }]
         }
         try:
-            res = requests.post(
-                SLACK_WEBHOOK_URL, 
-                json.dumps(payload), 
-                headers={'content-type': 'application/json'}
-            )
+            #res = requests.post(
+            #    SLACK_WEBHOOK_URL, 
+            #    json.dumps(payload), 
+            #    headers={'content-type': 'application/json'}
+            #)
             print res
         except Exception as e:
             print 'Error:' + e
