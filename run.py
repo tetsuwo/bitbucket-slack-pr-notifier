@@ -1,11 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import datetime
 import json
 from requests_oauthlib import OAuth1Session
 import os
 import random
 import requests
+import sqlite3
 import sys
 import time
 
@@ -21,15 +23,23 @@ SLACK_CHANNEL = os.environ.get('SLACK_CHANNEL')
 SLACK_USERNAME = os.environ.get('SLACK_USERNAME')
 SLACK_ICON_EMOJI = os.environ.get('SLACK_ICON_EMOJI')
 SLACK_TEXTS = os.environ.get('SLACK_TEXTS')
+SQLITE_DB_FILE = os.environ.get('SQLITE_DB_FILE')
 
 # ----
 
+con = sqlite3.connect(SQLITE_DB_FILE)
+cur = con.cursor()
 api = OAuth1Session(BITBUCKET_CONSUMER_KEY, BITBUCKET_CONSUMER_SECRET)
+
+# ----
+
+DATETIME_FORMAT = '%Y-%m-%d %H:%M:%S'
+CURRENT_TIME = datetime.datetime.now()
+COMPARE_TIME = CURRENT_TIME - datetime.timedelta(minutes=30)
 
 for repo in BITBUCKET_REPOSITORIES.split(','):
     print '[%s]' % repo
     api_request_url = BITBUCKET_API_ENDPOINT % (BITBUCKET_OWNERNAME, repo)
-    print '  API Request URL: ' + api_request_url
     req = api.get(api_request_url)
     if req.status_code != 200:
         print u'  Error: %d (%s)' % (req.status_code, req.text)
@@ -37,7 +47,6 @@ for repo in BITBUCKET_REPOSITORIES.split(','):
     response = json.loads(req.text)
     for row in response['values']:
         print u'  Pull Request ID: %d' % row['id']
-        print '  ----'
         title = '#%d: %s' % (row['id'], row['title'])
         text = random.choice(SLACK_TEXTS.split(','))
         payload = {
@@ -79,17 +88,52 @@ for repo in BITBUCKET_REPOSITORIES.split(','):
                 ]
             }]
         }
+
+        sql = 'SELECT id, checked_at FROM pull_requests WHERE id = ? AND repository_name = ? LIMIT 1'
+        cur.execute(sql, (row['id'], row['source']['repository']['full_name']))
+        res = cur.fetchone()
+        has_record = res != None
+        if has_record == True:
+            target_time = datetime.datetime.strptime(res[1], DATETIME_FORMAT)
+            if False == (target_time <= COMPARE_TIME):
+                print '  - Skipped:', row['id'], row['source']['repository']['full_name']
+                print '  - CheckedAt:', target_time, COMPARE_TIME
+                continue
+
         try:
             res = requests.post(
                 SLACK_WEBHOOK_URL, 
                 json.dumps(payload), 
                 headers={'content-type': 'application/json'}
             )
-            print res
+            print '  - Response:', res
+            if has_record == True:
+                cur.execute(
+                    u"UPDATE pull_requests SET checked_at = ? WHERE id = ? AND repository_name = ?",
+                    (
+                        datetime.datetime.strftime(CURRENT_TIME, '%Y-%m-%d %H:%M:%S'),
+                        int(row['id']),
+                        row['source']['repository']['full_name']
+                    )
+                )
+                con.commit()
+            else:
+                cur.execute(
+                    u"INSERT INTO pull_requests VALUES (?, ?, ?, ?)",
+                    (
+                        int(row['id']),
+                        row['source']['repository']['full_name'],
+                        datetime.datetime.strftime(CURRENT_TIME, '%Y-%m-%d %H:%M:%S'),
+                        datetime.datetime.strftime(CURRENT_TIME, '%Y-%m-%d %H:%M:%S')
+                    )
+                )
+                con.commit()
         except Exception as e:
-            print u'Error:' + e
-        print '  ===='
+            print '  - Error:', e
     print '  Finished'
-    time.sleep(1)
+    time.sleep(0)
+    print ''
+
+con.close()
 
 print 'Completed'
