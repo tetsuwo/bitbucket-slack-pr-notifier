@@ -35,7 +35,7 @@ api = OAuth1Session(BITBUCKET_CONSUMER_KEY, BITBUCKET_CONSUMER_SECRET)
 
 DATETIME_FORMAT = '%Y-%m-%d %H:%M:%S'
 CURRENT_TIME = datetime.datetime.now()
-COMPARE_TIME = CURRENT_TIME - datetime.timedelta(minutes=30)
+COMPARE_TIME = CURRENT_TIME - datetime.timedelta(minutes=120)
 
 for repo in BITBUCKET_REPOSITORIES.split(','):
     print '[%s]' % repo
